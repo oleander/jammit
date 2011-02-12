@@ -15,15 +15,16 @@ module Jammit
     # yet been cached. The package will be built, cached, and gzipped.
     def package
       parse_request
+      template_ext = Jammit.template_extension.to_sym
       case @extension
       when :js
         render :js => (@contents = Jammit.packager.pack_javascripts(@package))
-      when Jammit.template_extension.to_sym
+      when template_ext
         render :js => (@contents = Jammit.packager.pack_templates(@package))
       when :css
         render :text => generate_stylesheets, :content_type => 'text/css'
       end
-      cache_package if perform_caching
+      cache_package if perform_caching && (@extension != template_ext)
     rescue Jammit::PackageNotFound
       package_not_found
     end
@@ -53,7 +54,7 @@ module Jammit
     def generate_stylesheets
       return @contents = Jammit.packager.pack_stylesheets(@package, @variant) unless @variant == :mhtml
       @mtime      = Time.now
-      request_url = prefix_url(request.request_uri)
+      request_url = prefix_url(request.fullpath)
       cached_url  = prefix_url(Jammit.asset_url(@package, @extension, @variant, @mtime))
       css         = Jammit.packager.pack_stylesheets(@package, @variant, request_url)
       @contents   = css.gsub(request_url, cached_url) if perform_caching

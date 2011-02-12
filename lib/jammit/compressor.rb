@@ -22,7 +22,7 @@ module Jammit
 
     # Font extensions for which we allow embedding:
     EMBED_EXTS      = EMBED_MIME_TYPES.keys
-    EMBED_FONTS     = ['.ttf', '.otf']
+    EMBED_FONTS     = ['.ttf', '.otf', '.woff']
 
     # (32k - padding) maximum length for data-uri assets (an IE8 limitation).
     MAX_IMAGE_SIZE  = 32700
@@ -100,12 +100,12 @@ module Jammit
       paths       = paths.grep(Jammit.template_extension_matcher).sort
       base_path   = find_base_path(paths)
       compiled    = paths.map do |path|
-        contents  = File.open(path, 'r:binary') {|f| f.read }
+        contents  = read_binary_file(path)
         contents  = contents.gsub(/\n/, '').gsub("'", '\\\\\'')
         name      = template_name(path, base_path)
         "#{namespace}['#{name}'] = #{Jammit.template_function}('#{contents}');"
       end
-      compiler = Jammit.include_jst_script ? File.read(DEFAULT_JST_SCRIPT) : '';
+      compiler = Jammit.include_jst_script ? read_binary_file(DEFAULT_JST_SCRIPT) : '';
       setup_namespace = "#{namespace} = #{namespace} || {};"
       [JST_START, setup_namespace, compiler, compiled, JST_END].flatten.join("\n")
     end
@@ -131,7 +131,7 @@ module Jammit
     # the namespaced prefix. Otherwise, simply use the filename.
     def template_name(path, base_path)
       return File.basename(path, ".#{Jammit.template_extension}") unless base_path
-      path.gsub(/\A#{base_path}\/(.*)\.#{Jammit.template_extension}\Z/, '\1')
+      path.gsub(/\A#{Regexp.escape(base_path)}\/(.*)\.#{Jammit.template_extension}\Z/, '\1')
     end
 
     # In order to support embedded assets from relative paths, we need to
@@ -140,7 +140,7 @@ module Jammit
     # at it.
     def concatenate_and_tag_assets(paths, variant=nil)
       stylesheets = [paths].flatten.map do |css_path|
-        contents = File.open(css_path, 'r:binary') {|f| f.read }
+        contents = read_binary_file(css_path)
         contents.gsub(EMBED_DETECTOR) do |url|
           ipath, cpath = Pathname.new($1), Pathname.new(File.expand_path(css_path))
           is_url = URI.parse($1).absolute?
@@ -231,7 +231,7 @@ module Jammit
     # Return the Base64-encoded contents of an asset on a single line.
     def encoded_contents(asset_path)
       return @asset_contents[asset_path] if @asset_contents[asset_path]
-      data = File.open(asset_path, 'rb') {|f| f.read }
+      data = read_binary_file(asset_path)
       @asset_contents[asset_path] = Base64.encode64(data).gsub(/\n/, '')
     end
 
@@ -242,9 +242,13 @@ module Jammit
 
     # Concatenate together a list of asset files.
     def concatenate(paths)
-      [paths].flatten.map {|p| File.read(p) }.join("\n")
+      [paths].flatten.map {|p| read_binary_file(p) }.join("\n")
     end
 
+    # `File.read`, but in "binary" mode.
+    def read_binary_file(path)
+      File.open(path, 'rb') {|f| f.read }
+    end
   end
 
 end
